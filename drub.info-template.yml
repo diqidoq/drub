@@ -1,0 +1,11 @@
+name: THEMETITLE
+type: theme
+description: 'A Subtheme of BASETHEME'
+version: VERSION
+core: 8.x
+base theme: BASETHEME
+stylesheets:
+  all:
+    - css/layout.css
+    - css/style.css
+    - css/colors.css

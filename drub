@@ -1,5 +1,7 @@
 #!/bin/bash
 # Create a Drupal 8 subtheme.
+
+# Sudo check
 if [ "$EUID" -ne 0 ] ; then
  printf '
   Please make sure you start drub with sudo or as root (required for file permissions).
@@ -8,14 +10,15 @@ if [ "$EUID" -ne 0 ] ; then
  exit
 fi
 
+# Let's get the basic data
 read -ep "
  Type absolute path (type suggestion supported)
  to the basetheme directory of subtheme (no trailing slash): " BASEPATH
-
-read -p " What is the name of your new subtheme: " THEME
-
+read -p " What is the readable title for your new subtheme (e.g. My Theme beta v0.3): " TITLE
+read -p " What is the machine readable name for your new subtheme (lowercase, no special chars, no spaces, e.g.: my_theme): " THEME
 THEMEPATH="${BASEPATH%/*}"/"${THEME}"
 
+# Checks if THEMEPATH already exist and asks for how to go on.
 if [ -d "${THEMEPATH}" ] ; then
   printf "\n A directory for a theme with the same name you've entered does already exist ($THEMEPATH)."
   read -ep " Please provide another name or press enter to override existing theme directory with same name: " THEME2
@@ -31,24 +34,47 @@ fi
 
 printf "\n The path to your subtheme will be ${THEMEPATH} ..."
 
+# @TODO Second option copies basetheme only. We need a better subtheme generation here.
+# @TODO Script should ask sooner which known basetheme we manage here to implement specific options.
 read -p "
- Does your basetheme provide starterkits? If yes, type the relative path/name from Basetheme to starterkit of your choice.
- If not, leave empty and press enter. (path/name | <empty>): " KIT
+ Does your basetheme provide starterkits?
+ 1.) If yes, type the relative path/name from Basetheme to starterkit of your choice (e.g. starterkits/less).
+ 2.) If not, leave empty and press enter. (path/name | <empty>): " KIT
 
-if [ -z "${KIT}" ] && [ ! -d "${KIT}" ] ; then
-  read -p "The path you've entered does not exist. Please provide correct path to starterkit or leave empty and press enter for none. (path/name | <empty>): " KIT
+# Checks if KIT is NOT empty.
+if [ -n "${KIT}" ] ; then
+  if [ ! -d "${KIT}" ] ; then
+    read -p "The path you've entered does not exist. Please provide correct path
+    to starterkit or leave empty and press enter for none. (path/name | <empty>): " KIT
+  else
+    read -p "
+    If template files are provided by your basetheme or starterkit directory,
+    what placeholder (dummy text) for subtheme names does it use to replace (e.g. THEMENAME)?
+    Look in your basetheme or starterkit templates and type the word we need to replace with your themename here: " PLACEHOLDER
+
+    cp -r "${BASEPATH}"/"${KIT}" "${THEMEPATH}"
+    find "${THEMEPATH}" -name "*${PLACEHOLDER}*" -exec rename "s/${PLACEHOLDER}/${THEME}/g" '{}' \;
+    find "${THEMEPATH}" -type f -exec sed -i "s/${PLACEHOLDER}/${THEME}/g" {} +
+    find "${THEMEPATH}" -type f -exec sed -i "s/THEMETITLE/${TITLE}/g" {} +
+    find "${THEMEPATH}" -name "*starterkit.yml" -exec rename "s/starterkit\.yml/info\.yml/g" '{}' \;
+    printf "\n Subtheme created in same path level than basetheme (Drupal default). $PLACEHOLDER renaming to $THEME finished."
+  fi
+else # If KIT is empty...
+  mkdir "${THEMEPATH}"
+  printf "name: $TITLE
+  type: theme
+  description: 'A Subtheme of $(basename ${BASEPATH})'
+  version: VERSION
+  core: 8.x
+  base theme: $(basename ${BASEPATH})
+  stylesheets:
+    all:
+      - css/layout.css
+      - css/style.css
+      - css/colors.css
+      " >> "${THEMEPATH}"/"${THEME}".info.yml
 fi
 
-printf "\n If provided by your starterkit or example files in Basetheme directory,
- what is the placeholder (dummy text) for subtheme names, often referred to as _THEMENAME_.\n"
-sleep 1s
-read -p " Look in your Basetheme examples and type the word we need to replace with your themename here: " PLACEHOLDER
-
-cp -r "${BASEPATH}"/"${KIT}" "${THEMEPATH}"
-find "${THEMEPATH}" -name "*${PLACEHOLDER}*" -exec rename "s/${PLACEHOLDER}/${THEME}/g" '{}' \;
-find "${THEMEPATH}" -type f -exec sed -i "s/${PLACEHOLDER}/${THEME}/g" {} +
-find "${THEMEPATH}" -name "*starterkit.yml" -exec rename "s/starterkit\.yml/info\.yml/g" '{}' \;
-printf "\n Subtheme created in same path level than basetheme (Drupal default). $PLACEHOLDER renaming to $THEME finished."
 
 if [[ "${BASEPATH}" == *"bootstrap"* ]] ; then
  printf "\n It seems your basetheme is Bootstrap."
