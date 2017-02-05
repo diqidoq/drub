@@ -1,0 +1,79 @@
+#!/bin/bash
+# Create a Drupal 8 subtheme.
+if [ "$EUID" -ne 0 ] ; then
+ printf '
+  Please make sure you start drub with sudo or as root (required for file permissions).
+  This requires drub to be placed in or symlinked to /usr/local/bin/drub with chmod a+x.
+  --- Drub quits now. ---\n\n'
+ exit
+fi
+
+read -ep "
+ Type absolute path (type suggestion supported)
+ to the basetheme directory of subtheme (no trailing slash): " BASEPATH
+
+read -p " What is the name of your new subtheme: " THEME
+
+THEMEPATH="${BASEPATH%/*}"/"${THEME}"
+
+if [ -d "${THEMEPATH}" ] ; then
+  printf "\n A directory for a theme with the same name you've entered does already exist ($THEMEPATH)."
+  read -ep " Please provide another name or press enter to override existing theme directory with same name: " THEME2
+  if [ -n "${THEME2}" ] ; then
+    THEME="${THEME2}"
+    THEMEPATH="${BASEPATH%/*}"/"${THEME}"
+    printf "\n Ok. I use the new given theme name now.\n"
+  else
+    printf "\n Ok, you choose to keep the first entered name and we will override existing theme folder with same name then."
+    rm -r "${THEMEPATH}"
+  fi
+fi
+
+printf "\n The path to your subtheme will be ${THEMEPATH} ..."
+
+read -p "
+ Does your basetheme provide starterkits? If yes, type the relative path/name from Basetheme to starterkit of your choice.
+ If not, leave empty and press enter. (path/name | <empty>): " KIT
+
+if [ -z "${KIT}" ] && [ ! -d "${KIT}" ] ; then
+  read -p "The path you've entered does not exist. Please provide correct path to starterkit or leave empty and press enter for none. (path/name | <empty>): " KIT
+fi
+
+printf "\n If provided by your starterkit or example files in Basetheme directory,
+ what is the placeholder (dummy text) for subtheme names, often referred to as _THEMENAME_.\n"
+sleep 1s
+read -p " Look in your Basetheme examples and type the word we need to replace with your themename here: " PLACEHOLDER
+
+cp -r "${BASEPATH}"/"${KIT}" "${THEMEPATH}"
+find "${THEMEPATH}" -name "*${PLACEHOLDER}*" -exec rename "s/${PLACEHOLDER}/${THEME}/g" '{}' \;
+find "${THEMEPATH}" -type f -exec sed -i "s/${PLACEHOLDER}/${THEME}/g" {} +
+find "${THEMEPATH}" -name "*starterkit.yml" -exec rename "s/starterkit\.yml/info\.yml/g" '{}' \;
+printf "\n Subtheme created in same path level than basetheme (Drupal default). $PLACEHOLDER renaming to $THEME finished."
+
+if [[ "${BASEPATH}" == *"bootstrap"* ]] ; then
+ printf "\n It seems your basetheme is Bootstrap."
+ sleep 2s
+ printf "\n Should I place the Bootstrap library in your new subtheme directory (suggested by Boostrap for Drupal less and sass starterkit)?\n"
+ read -p " Type version (e.g. 3.3.7) or type n for NO: " BOOTSTRAP
+
+ if [[ ${BOOTSTRAP} != "n" ]] ; then
+  wget https://github.com/twbs/bootstrap/archive/v${BOOTSTRAP}.zip -P "${THEMEPATH}"
+  unzip "${THEMEPATH}"/v"${BOOTSTRAP}".zip -d "${THEMEPATH}"
+  mv "${THEMEPATH}"/bootstrap-"${BOOTSTRAP}" "${THEMEPATH}"/bootstrap
+  rm "${THEMEPATH}"/v"${BOOTSTRAP}".zip
+  printf "\n ${BOOTSTRAP} placed in your subtheme.\n\n"
+ fi
+fi
+
+read -p " Fix file folder permissions for Drupal? (y/n): " PRM
+
+if [[ "${PRM}" == "y" ]] ; then
+  read -p "We use www-data for group but which user is the owner? (type carefully): " NEWUSER
+  chown $NEWUSER:www-data "${THEMEPATH}" -R
+  find "${THEMEPATH}" -type d -exec chmod u=rwx,g=rx,o= '{}' \;
+  find "${THEMEPATH}" -type f -exec chmod u=rw,g=r,o= '{}' \;
+ else
+  printf "\n Subtheme creation script finished successfully, but without file permission check.\n"
+fi
+
+printf "\n Subtheme creation script finished successfully.\n"
